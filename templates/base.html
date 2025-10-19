@@ -2,36 +2,47 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎓 Student Life Coach</title>
+    <title>{% block title %}Student Life Coach{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <style>
-        .streak-flame {
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-    </style>
+    <script src="https://kit.fontawesome.com/a2e0e6e6b1.js" crossorigin="anonymous"></script>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <div class="mb-6">
-                    {% for msg in messages %}
-                        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded">
-                            {{ msg }}
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
+<body class="bg-gray-50 font-sans">
+
+    <!-- Navigation Bar -->
+    <nav class="bg-indigo-600 text-white shadow-md py-4">
+        <div class="max-w-5xl mx-auto flex justify-between items-center px-4">
+            <a href="/" class="text-2xl font-bold">🎓 Student Life Coach</a>
+            <div class="space-x-4">
+                <a href="/" class="hover:underline">Trang chủ</a>
+                <a href="{{ url_for('add_event_form') }}" class="hover:underline">Thêm lịch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages (hiển thị tách biệt để dễ nhìn) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="max-w-3xl mx-auto mt-4">
+          {% for category, message in messages %}
+            <div class="mb-3 px-4 py-3 rounded-lg shadow text-white 
+                        {% if category == 'success' %}bg-green-500{% elif category == 'error' %}bg-red-500{% elif category == 'warning' %}bg-yellow-500{% else %}bg-blue-500{% endif %}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Main content block -->
+    <main class="mt-8">
         {% block content %}{% endblock %}
-    </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-100 text-center text-gray-500 py-6 mt-12 border-t">
+        © 2025 Student Life Coach | Kết nối đam mê – Học đều mỗi ngày 💪
+    </footer>
+
 </body>
 </html>
