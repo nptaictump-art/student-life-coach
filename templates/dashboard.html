@@ -114,6 +114,21 @@
         </a>
     </div>
 
+    <!-- Upload Excel Section -->
+    {% if authenticated %}
+    <div class="mt-10 text-center text-gray-700 bg-indigo-50 rounded-xl py-6 shadow-inner">
+        <p class="text-lg font-semibold mb-2 text-indigo-700">📤 Tạo lịch học tự động</p>
+        <p>
+            <a href="{{ url_for('upload_form') }}"
+               class="text-indigo-600 hover:text-indigo-800 underline font-medium">Tải file Excel để tạo lịch học tự động</a>
+        </p>
+        <p>
+            <a href="{{ url_for('download_template') }}"
+               class="text-indigo-600 hover:text-indigo-800 underline font-medium">📄 Tải mẫu Excel import lịch học</a>
+        </p>
+    </div>
+    {% endif %}
+
     <!-- Encouragement -->
     <div class="mt-10 text-center text-gray-700">
         {% if user.streak >= 7 %}
