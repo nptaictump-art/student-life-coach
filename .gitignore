@@ -1,6 +1,5 @@
+# Bỏ qua file chứa token và thông tin nhạy cảm
+*.pickle
 credentials.json
-token.pickle
 __pycache__/
-*.pyc
-instance/
-.envtoken_nptaictump_gmail_com.pickle
+*.db
