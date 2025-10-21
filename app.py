@@ -2,8 +2,9 @@ import os
 import io
 import json
 import pickle
-import pandas as pd
 from datetime import date, timedelta, datetime
+
+import pandas as pd
 from dateutil import parser
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -13,7 +14,26 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from flask_sqlalchemy import SQLAlchemy
-import openai
+
+# ==== OpenAI (API v1.x) ====
+try:
+    from openai import OpenAI
+    _OPENAI_AVAILABLE = True
+except Exception:
+    _OPENAI_AVAILABLE = False
+    OpenAI = None  # type: ignore
+
+
+def _openai_client_or_none():
+    """Khởi tạo client OpenAI nếu có API key hợp lệ."""
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not _OPENAI_AVAILABLE or not api_key:
+        return None
+    try:
+        return OpenAI(api_key=api_key)
+    except Exception:
+        return None
+
 
 # =========================
 # CẤU HÌNH ỨNG DỤNG
@@ -21,17 +41,9 @@ import openai
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "student_coach_final_2025")
 
-# Cookie cho HTTPS (Render)
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "None"
-
-# Cho phép HTTP khi dev local
 os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
-
-# =========================
-# OPENAI CONFIG
-# =========================
-openai.api_key = os.getenv("OPENAI_API_KEY", "")
 
 # =========================
 # GOOGLE OAUTH2 CONFIG
@@ -49,17 +61,20 @@ GOOGLE_ENABLED = os.path.exists(CREDENTIALS_FILE)
 # DATABASE CONFIG
 # =========================
 DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL:
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 else:
-    DATABASE_URL = "sqlite:///local.db"
+    DATABASE_URL = DATABASE_URL or "sqlite:///local.db"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
+print("✅ DATABASE_URL in use:", DATABASE_URL)
 
 
+# =========================
+# MODEL
+# =========================
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True)
@@ -67,9 +82,18 @@ class User(db.Model):
 
 
 # =========================
-# GOOGLE CALENDAR HỖ TRỢ
+# GOOGLE CALENDAR TIỆN ÍCH
 # =========================
-def build_flow(redirect_uri, state=None):
+def _redirect_base() -> str:
+    host = os.getenv("PUBLIC_BASE_URL")
+    if not host:
+        host = request.host_url.rstrip("/")
+    if "app.github.dev" in host and not host.startswith("https://"):
+        host = host.replace("http://", "https://", 1)
+    return f"{host}/oauth2callback"
+
+
+def build_flow(redirect_uri: str, state: str | None = None) -> Flow | None:
     if not GOOGLE_ENABLED:
         return None
     flow = Flow.from_client_secrets_file(CREDENTIALS_FILE, scopes=SCOPES, redirect_uri=redirect_uri)
@@ -78,7 +102,7 @@ def build_flow(redirect_uri, state=None):
     return flow
 
 
-def get_token_filename(email):
+def get_token_filename(email: str | None) -> str:
     safe_email = (email or "anonymous").replace("@", "_").replace(".", "_")
     return f"token_{safe_email}.pickle"
 
@@ -105,7 +129,10 @@ def get_google_calendar_service():
 def clear_old_tokens():
     for file in os.listdir("."):
         if file.startswith("token_") and file.endswith(".pickle"):
-            os.remove(file)
+            try:
+                os.remove(file)
+            except Exception:
+                pass
 
 
 # =========================
@@ -113,7 +140,11 @@ def clear_old_tokens():
 # =========================
 @app.route("/")
 def dashboard():
-    user = {"streak": 5, "total_points": 120, "email": session.get("google_email") or "student@example.com"}
+    user = {
+        "streak": 5,
+        "total_points": 120,
+        "email": session.get("google_email") or "student@example.com",
+    }
     completion_rate = 85
     days = [(date.today() - timedelta(days=i)).strftime("%d/%m") for i in range(6, -1, -1)]
     counts = [2, 1, 3, 2, 0, 2, 3]
@@ -130,42 +161,34 @@ def dashboard():
                 timeMax=week_ahead,
                 maxResults=50,
                 singleEvents=True,
-                orderBy="startTime"
+                orderBy="startTime",
             ).execute()
             events = results.get("items", [])
 
-    return render_template("dashboard.html",
-                           user=user,
-                           completion_rate=completion_rate,
-                           days=days,
-                           counts=counts,
-                           google_enabled=GOOGLE_ENABLED,
-                           authenticated=("google_email" in session),
-                           events=events)
+    return render_template(
+        "dashboard.html",
+        user=user,
+        completion_rate=completion_rate,
+        days=days,
+        counts=counts,
+        google_enabled=GOOGLE_ENABLED,
+        authenticated=("google_email" in session),
+        events=events,
+    )
 
 
 # =========================
 # GOOGLE AUTH
 # =========================
-def _redirect_base():
-    host = os.getenv("PUBLIC_BASE_URL")
-    if not host:
-        host = request.host_url.rstrip("/")
-    return f"{host}/oauth2callback"
-
-
 @app.route("/authorize")
 def authorize():
     if not GOOGLE_ENABLED:
         flash("⚠️ Thiếu credentials.json — không thể xác thực Google Calendar.", "error")
         return redirect(url_for("dashboard"))
-
-    clear_old_tokens()  # 🔥 Xoá token cũ khi đổi scope
+    clear_old_tokens()
     flow = build_flow(redirect_uri=_redirect_base())
     authorization_url, state = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent"
+        access_type="offline", include_granted_scopes="true", prompt="consent",
     )
     session["state"] = state
     return redirect(authorization_url)
@@ -173,29 +196,26 @@ def authorize():
 
 @app.route("/oauth2callback")
 def oauth2callback():
+    if not GOOGLE_ENABLED:
+        flash("⚠️ Thiếu credentials.json — không thể xác thực Google Calendar.", "error")
+        return redirect(url_for("dashboard"))
     try:
         state = session.get("state")
         flow = build_flow(redirect_uri=_redirect_base(), state=state)
         flow.fetch_token(authorization_response=request.url)
         creds = flow.credentials
-
-        service = build("oauth2", "v2", credentials=creds)
-        user_info = service.userinfo().get().execute()
+        oauth2 = build("oauth2", "v2", credentials=creds)
+        user_info = oauth2.userinfo().get().execute()
         email = user_info.get("email")
-
         session["google_email"] = email
-        token_file = get_token_filename(email)
-        with open(token_file, "wb") as f:
+        with open(get_token_filename(email), "wb") as f:
             pickle.dump(creds, f)
-
         if not User.query.filter_by(email=email).first():
             db.session.add(User(email=email))
             db.session.commit()
-
         flash(f"✅ Đăng nhập thành công với {email}!", "success")
     except Exception as e:
         flash(f"❌ Google authentication error: {str(e)}", "error")
-
     return redirect(url_for("dashboard"))
 
 
@@ -207,7 +227,7 @@ def logout_google():
 
 
 # =========================
-# THÊM LỊCH HỌC THỦ CÔNG
+# THÊM LỊCH HỌC & UPLOAD FILE
 # =========================
 @app.route("/add_event", methods=["GET", "POST"])
 def add_event():
@@ -216,71 +236,86 @@ def add_event():
         date_str = request.form["date"]
         start_time = request.form["start_time"]
         end_time = request.form["end_time"]
-
         service = get_google_calendar_service()
         if not service:
             flash("⚠️ Bạn cần kết nối Google Calendar trước.", "warning")
             return redirect(url_for("authorize"))
-
-        start_dt = parser.parse(f"{date_str} {start_time}")
-        end_dt = parser.parse(f"{date_str} {end_time}")
-
-        event = {
-            "summary": title,
-            "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Ho_Chi_Minh"},
-            "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Ho_Chi_Minh"},
-        }
-        service.events().insert(calendarId="primary", body=event).execute()
-        flash(f"✅ Đã tạo sự kiện: {title}", "success")
-        return redirect(url_for("dashboard"))
-
-    return render_template("add_event.html")
-
-
-# =========================
-# UPLOAD FILE EXCEL
-# =========================
-@app.route("/upload", methods=["GET", "POST"])
-def upload():
-    if request.method == "POST":
-        file = request.files["file"]
-        if not file or file.filename == "":
-            flash("⚠️ Chưa chọn file.", "warning")
-            return redirect(url_for("upload"))
-
-        df = pd.read_excel(file)
-        service = get_google_calendar_service()
-        if not service:
-            flash("⚠️ Hãy kết nối Google trước.", "warning")
-            return redirect(url_for("authorize"))
-
-        for _, row in df.iterrows():
-            title = str(row.get("nội dung nhắc nhở", "Lịch học"))
-            day, month, year = int(row["ngày"]), int(row["tháng"]), int(row["năm"])
-            hour = row["giờ"]
-            remind = int(row.get("thời gian nhắc nhở", 10))
-            end_time = row.get("thời gian kết thúc", "")
-
-            start_dt = parser.parse(f"{day}/{month}/{year} {hour}")
-            end_dt = parser.parse(end_time) if end_time else start_dt + timedelta(minutes=remind)
-
+        try:
+            start_dt = parser.parse(f"{date_str} {start_time}")
+            end_dt = parser.parse(f"{date_str} {end_time}")
             event = {
                 "summary": title,
                 "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Ho_Chi_Minh"},
                 "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Ho_Chi_Minh"},
+                "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 15}]},
             }
             service.events().insert(calendarId="primary", body=event).execute()
-
-        flash("✅ Đã import lịch thành công!", "success")
+            flash(f"✅ Đã tạo sự kiện: {title}", "success")
+        except Exception as e:
+            flash(f"❌ Lỗi khi tạo sự kiện: {str(e)}", "error")
         return redirect(url_for("dashboard"))
+    return render_template("add_event.html", google_enabled=GOOGLE_ENABLED, authenticated=("google_email" in session))
 
-    return render_template("upload.html")
+
+@app.route("/add_event_form")
+def add_event_form():
+    return redirect(url_for("add_event"))
+
+
+@app.route("/upload", methods=["GET", "POST"])
+def upload():
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            flash("⚠️ Chưa chọn file.", "warning")
+            return redirect(url_for("upload"))
+        try:
+            filename = file.filename.lower()
+            df = pd.read_excel(file) if filename.endswith(".xlsx") else pd.read_csv(file)
+        except Exception as e:
+            flash(f"❌ Không đọc được file: {str(e)}", "error")
+            return redirect(url_for("upload"))
+        service = get_google_calendar_service()
+        if not service:
+            flash("⚠️ Hãy kết nối Google trước.", "warning")
+            return redirect(url_for("authorize"))
+        norm_cols = {c.strip().lower(): c for c in df.columns}
+        required = ["ngày", "tháng", "năm", "giờ", "nội dung nhắc nhở", "thời gian nhắc nhở", "thời gian kết thúc"]
+        for col in required:
+            if col not in norm_cols:
+                flash(f"❌ Thiếu cột bắt buộc: {col}", "error")
+                return redirect(url_for("upload"))
+        successes, failures = 0, 0
+        tz = "Asia/Ho_Chi_Minh"
+        for _, row in df.iterrows():
+            try:
+                day = int(row[norm_cols["ngày"]])
+                month = int(row[norm_cols["tháng"]])
+                year = int(row[norm_cols["năm"]])
+                title = str(row[norm_cols["nội dung nhắc nhở"]]).strip()
+                start_dt = parser.parse(f"{year}-{month:02d}-{day:02d} {row[norm_cols['giờ']]}")
+                end_dt = parser.parse(f"{year}-{month:02d}-{day:02d} {row[norm_cols['thời gian kết thúc']]}")
+                minutes_before = int(row[norm_cols["thời gian nhắc nhở"]])
+                event = {
+                    "summary": title,
+                    "start": {"dateTime": start_dt.isoformat(), "timeZone": tz},
+                    "end": {"dateTime": end_dt.isoformat(), "timeZone": tz},
+                    "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": minutes_before}]},
+                }
+                service.events().insert(calendarId="primary", body=event).execute()
+                successes += 1
+            except Exception:
+                failures += 1
+        flash(f"✅ Import xong! Thành công: {successes}, lỗi: {failures}.", "success")
+        return redirect(url_for("dashboard"))
+    return render_template("upload.html", google_enabled=GOOGLE_ENABLED, authenticated=("google_email" in session))
 
 
 @app.route("/download-template")
 def download_template():
-    cols = ["Số thứ tự", "ngày", "tháng", "năm", "giờ", "nội dung nhắc nhở", "thời gian nhắc nhở", "thời gian kết thúc"]
-    df = pd.DataFrame([[1, 20, 10, 2025, "08:00", "Ôn tập Toán", 15, "09:00"]], columns=cols)
+    cols = ["ngày", "tháng", "năm", "giờ", "nội dung nhắc nhở", "thời gian nhắc nhở", "thời gian kết thúc"]
+    sample = [[20, 10, 2025, "08:00", "Ôn tập Toán", 15, "09:00"]]
+    df = pd.DataFrame(sample, columns=cols)
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
@@ -291,59 +326,66 @@ def download_template():
 # =========================
 # AI QUIZ GENERATOR
 # =========================
-def generate_quiz_from_ai(topic):
-    prompt = f"""
-    Tạo 10 câu hỏi trắc nghiệm tiếng Việt về chủ đề "{topic}".
-    Mỗi câu hỏi có 4 lựa chọn (A, B, C, D) và một đáp án đúng.
-    Trả kết quả JSON: 
-    [
-      {{
-        "question": "Câu hỏi...",
-        "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-        "correct_answer": "A"
-      }}
-    ]
-    """
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return json.loads(response.choices[0].message.content)
-
-
 @app.route("/generate_quiz", methods=["GET", "POST"])
 def generate_quiz():
     if request.method == "POST":
-        topic = request.form["topic"]
-        try:
-            quiz = generate_quiz_from_ai(topic)
-            session["quiz"] = quiz
-            session["topic"] = topic
-            return render_template("quiz.html", quiz=quiz, topic=topic)
-        except Exception as e:
-            flash(f"❌ Lỗi tạo câu hỏi: {str(e)}", "error")
+        topic = request.form.get("topic", "").strip()
+        if not topic:
+            flash("⚠️ Vui lòng nhập chủ đề/bài học.", "warning")
             return redirect(url_for("generate_quiz"))
+        client = _openai_client_or_none()
+        if not client:
+            quiz = [{"question": f"[FAKE AI] Câu {i} về {topic}?", "options": [f"{opt}. Lựa chọn" for opt in "ABCD"], "correct_answer": "A"} for i in range(1, 11)]
+        else:
+            prompt = f"""
+            Tạo 10 câu hỏi trắc nghiệm tiếng Việt về chủ đề "{topic}".
+            Mỗi câu có 4 lựa chọn A-D, 1 đáp án đúng.
+            Trả JSON chuẩn:
+            [{{"question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"correct_answer":"A"}}]
+            """
+            try:
+                resp = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], temperature=0.5)
+                quiz = json.loads(resp.choices[0].message.content)
+            except Exception:
+                quiz = [{"question": f"[Fallback] Câu {i} về {topic}?", "options": [f"{opt}. Đáp án" for opt in "ABCD"], "correct_answer": "A"} for i in range(1, 11)]
+        session["quiz"], session["topic"] = quiz, topic
+        return render_template("quiz.html", quiz=quiz, topic=topic)
     return render_template("generate_quiz.html")
 
 
 @app.route("/submit_quiz", methods=["POST"])
 def submit_quiz():
-    quiz = session.get("quiz", [])
-    topic = session.get("topic", "Bài học")
-    score = 0
+    quiz, topic = session.get("quiz", []), session.get("topic", "Bài học")
+    score = sum(1 for i, q in enumerate(quiz, 1) if request.form.get(f"q{i}", "").startswith(q["correct_answer"]))
+    client = _openai_client_or_none()
+    if client:
+        try:
+            prompt = f"Đánh giá khi học sinh đạt {score}/10 điểm chủ đề '{topic}', bằng tiếng Việt, ngắn, có khích lệ."
+            resp = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], temperature=0.4)
+            feedback = resp.choices[0].message.content
+        except Exception:
+            feedback = f"Bạn đạt {score}/10. Hãy xem lại những câu sai và ôn lại nhé."
+    else:
+        feedback = f"[Fallback] Bạn đạt {score}/10. Tiếp tục cố gắng nhé!"
+    return render_template("quiz_result.html", score=score, feedback=feedback, topic=topic)
 
-    for i, q in enumerate(quiz, 1):
-        ans = request.form.get(f"q{i}")
-        if ans and ans.startswith(q["correct_answer"]):
-            score += 1
 
-    feedback_prompt = f"Đánh giá năng suất học tập khi đạt {score}/10 điểm trong chủ đề '{topic}' bằng tiếng Việt."
-    feedback_resp = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": feedback_prompt}]
-    )
-    feedback = feedback_resp.choices[0].message.content
-    return render_template("quiz_result.html", score=score, feedback=feedback)
+# =========================
+# TIỆN ÍCH KHÁC
+# =========================
+@app.route("/mark_complete")
+def mark_complete():
+    flash("🎯 Bạn đã đánh dấu hoàn thành buổi học hôm nay!", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/healthz")
+def healthz():
+    return {"status": "ok", "time": datetime.utcnow().isoformat()}
+
+@app.route("/upload_form")
+def upload_form():
+    return redirect(url_for("upload"))
 
 
 # =========================
@@ -352,4 +394,6 @@ def submit_quiz():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Server running on port {port}")
+    app.run(host="0.0.0.0", port=port)
