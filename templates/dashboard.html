@@ -103,7 +103,7 @@
 
     <!-- Action Buttons -->
     <div class="flex flex-col md:flex-row justify-center gap-6 mt-8">
-        <a href="{{ url_for('add_event_form') }}"
+        <a href="{{ url_for('add_event') }}"
            class="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-8 py-3 rounded-full shadow-md transition transform hover:scale-105">
            <i class="fa-solid fa-calendar-plus mr-2"></i> ➕ Thêm Lịch Học
         </a>
@@ -112,6 +112,11 @@
            class="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3 rounded-full shadow-md transition transform hover:scale-105">
            <i class="fa-solid fa-fire mr-2"></i> Đánh Dấu Hoàn Thành
         </a>
+
+        <a href="{{ url_for('generate_quiz') }}"
+           class="inline-flex items-center bg-purple-600 hover:bg-purple-700 text-white font-semibold px-8 py-3 rounded-full shadow-md transition transform hover:scale-105">
+           <i class="fa-solid fa-question mr-2"></i> 🧠 Làm Quiz AI
+        </a>
     </div>
 
     <!-- Upload Excel Section -->
@@ -119,7 +124,7 @@
     <div class="mt-10 text-center text-gray-700 bg-indigo-50 rounded-xl py-6 shadow-inner">
         <p class="text-lg font-semibold mb-2 text-indigo-700">📤 Tạo lịch học tự động</p>
         <p>
-            <a href="{{ url_for('upload_form') }}"
+            <a href="{{ url_for('upload') }}"
                class="text-indigo-600 hover:text-indigo-800 underline font-medium">Tải file Excel để tạo lịch học tự động</a>
         </p>
         <p>
@@ -145,14 +150,18 @@
 
 <!-- Chart.js -->
 <script>
+// Chuyển dữ liệu từ Jinja2 sang JavaScript một cách an toàn
+const chartDays = {{ days|tojson|safe }};
+const chartCounts = {{ counts|tojson|safe }};
+
 const ctx = document.getElementById('progressChart').getContext('2d');
 new Chart(ctx, {
     type: 'bar',
     data: {
-        labels: {{ days|tojson }},
+        labels: chartDays,
         datasets: [{
             label: 'Số buổi học',
-            data: {{ counts|tojson }},
+            data: chartCounts,
             backgroundColor: '#6366f1',
             borderColor: '#4f46e5',
             borderWidth: 1,
@@ -161,9 +170,7 @@ new Chart(ctx, {
     },
     options: {
         responsive: true,
-        plugins: {
-            legend: { display: false }
-        },
+        plugins: { legend: { display: false } },
         scales: {
             y: {
                 beginAtZero: true,
