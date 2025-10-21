@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-3xl mx-auto py-10 px-4 text-center">
+  <h1 class="text-3xl font-bold text-indigo-700 mb-4 flex justify-center items-center gap-2">
+    🧠 Tạo bài trắc nghiệm tự động
+  </h1>
+  <p class="text-gray-600 mb-8">
+    Nhập tên <b>môn học</b> hoặc <b>chủ đề bài học</b> để hệ thống tự động sinh ra 10 câu hỏi trắc nghiệm bằng AI.
+  </p>
+
+  <form method="POST" class="bg-white rounded-2xl shadow-lg p-6">
+    <div class="mb-6">
+      <input type="text" name="topic" required
+             placeholder="Ví dụ: Cấu trúc dữ liệu, Lập trình Python cơ bản..."
+             class="w-full border border-gray-300 rounded-xl p-3 text-gray-700 focus:ring-2 focus:ring-indigo-300 focus:outline-none">
+    </div>
+    <button type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-full shadow-md transition transform hover:scale-105">
+      🚀 Tạo bài trắc nghiệm
+    </button>
+  </form>
+
+  <div class="mt-10">
+    <a href="{{ url_for('dashboard') }}"
+       class="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-semibold transition">
+       <i class="fa-solid fa-arrow-left mr-2"></i> Quay lại trang chính
+    </a>
+  </div>
+</div>
+{% endblock %}

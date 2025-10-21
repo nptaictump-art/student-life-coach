@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-3xl mx-auto py-10 px-6 text-center">
+  <h2 class="text-3xl font-bold text-indigo-700 mb-4 flex justify-center items-center gap-2">
+    📊 Kết quả trắc nghiệm
+  </h2>
+  <p class="text-xl text-gray-800 mb-8">
+    Bạn đã trả lời đúng <b class="text-green-600">{{ score }}/10</b> câu hỏi!
+  </p>
+
+  <div class="bg-white rounded-2xl shadow-lg p-6 text-left">
+    <h3 class="text-lg font-semibold text-green-700 mb-2">
+      💡 Gợi ý cải thiện từ AI:
+    </h3>
+    <p class="text-gray-700 leading-relaxed">{{ feedback }}</p>
+  </div>
+
+  <div class="mt-10 flex flex-col md:flex-row justify-center gap-4">
+    <a href="{{ url_for('generate_quiz') }}"
+       class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-full shadow-md transition transform hover:scale-105">
+       🔁 Làm bài mới
+    </a>
+    <a href="{{ url_for('dashboard') }}"
+       class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-full shadow-md transition transform hover:scale-105">
+       🏠 Quay lại trang chính
+    </a>
+  </div>
+</div>
+{% endblock %}

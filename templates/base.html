@@ -2,46 +2,66 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>{% block title %}Student Life Coach{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://kit.fontawesome.com/a2e0e6e6b1.js" crossorigin="anonymous"></script>
-</head>
-<body class="bg-gray-50 font-sans">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}🎓 Student Life Coach{% endblock %}</title>
 
-    <!-- Navigation Bar -->
-    <nav class="bg-indigo-600 text-white shadow-md py-4">
-        <div class="max-w-5xl mx-auto flex justify-between items-center px-4">
-            <a href="/" class="text-2xl font-bold">🎓 Student Life Coach</a>
-            <div class="space-x-4">
-                <a href="/" class="hover:underline">Trang chủ</a>
-                <a href="{{ url_for('add_event_form') }}" class="hover:underline">Thêm lịch</a>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome -->
+    <script src="https://kit.fontawesome.com/a2d9a67b8b.js" crossorigin="anonymous"></script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-6xl mx-auto flex justify-between items-center px-4 py-4">
+            <a href="{{ url_for('dashboard') }}" class="text-2xl font-bold flex items-center gap-2">
+                🎓 <span>Student Life Coach</span>
+            </a>
+            <div class="space-x-4 text-sm">
+                <a href="{{ url_for('dashboard') }}" class="hover:text-yellow-300">Trang chủ</a>
+                {% if authenticated %}
+                    <a href="{{ url_for('add_event_form') }}" class="hover:text-yellow-300">Thêm lịch</a>
+                    <a href="{{ url_for('upload_form') }}" class="hover:text-yellow-300">Tải file Excel</a>
+                    <a href="{{ url_for('generate_quiz') }}" class="hover:text-yellow-300">Quiz AI</a>
+                    <a href="{{ url_for('logout_google') }}" class="hover:text-yellow-300">Đăng xuất</a>
+                {% else %}
+                    <a href="{{ url_for('authorize') }}" class="hover:text-yellow-300">Đăng nhập Google</a>
+                {% endif %}
             </div>
         </div>
     </nav>
 
-    <!-- Flash Messages (hiển thị tách biệt để dễ nhìn) -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="max-w-3xl mx-auto mt-4">
-          {% for category, message in messages %}
-            <div class="mb-3 px-4 py-3 rounded-lg shadow text-white 
-                        {% if category == 'success' %}bg-green-500{% elif category == 'error' %}bg-red-500{% elif category == 'warning' %}bg-yellow-500{% else %}bg-blue-500{% endif %}">
-              {{ message }}
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <!-- Flash Messages -->
+    <div class="max-w-3xl mx-auto mt-6 px-4 w-full">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% set color = {
+                        'success': 'green',
+                        'error': 'red',
+                        'warning': 'yellow',
+                        'info': 'blue'
+                    }[category] if category in ['success','error','warning','info'] else 'gray' %}
+                    <div class="bg-{{ color }}-100 border-l-4 border-{{ color }}-500 text-{{ color }}-800 p-4 mb-4 rounded shadow-sm flex items-start">
+                        <i class="fa-solid fa-circle-info mt-1 mr-3 text-{{ color }}-500"></i>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
 
-    <!-- Main content block -->
-    <main class="mt-8">
+    <!-- Main Content -->
+    <main class="flex-1 w-full">
         {% block content %}{% endblock %}
     </main>
 
     <!-- Footer -->
-    <footer class="bg-gray-100 text-center text-gray-500 py-6 mt-12 border-t">
-        © 2025 Student Life Coach | Kết nối đam mê – Học đều mỗi ngày 💪
+    <footer class="bg-indigo-600 text-white text-center text-sm py-4 mt-10">
+        © 2025 Student Life Coach — Học đều, sống hiệu quả 🌟
     </footer>
 
 </body>

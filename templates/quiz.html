@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-4xl mx-auto py-10 px-6">
+  <h2 class="text-2xl font-bold mb-6 text-indigo-700 flex items-center gap-2">
+    🎓 Bài trắc nghiệm: <span class="text-gray-800">{{ topic }}</span>
+  </h2>
+
+  <form method="POST" action="{{ url_for('submit_quiz') }}">
+    {% for q in quiz %}
+    <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <p class="font-semibold text-gray-800 mb-3">
+        {{ loop.index }}. {{ q.question }}
+      </p>
+      {% for opt in q.options %}
+      <label class="block mb-2 text-gray-700 hover:text-indigo-700 cursor-pointer">
+        <input type="radio" name="q{{ loop.parent.index }}" value="{{ opt }}" required class="mr-2">
+        {{ opt }}
+      </label>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div class="text-center mt-8">
+      <button type="submit"
+              class="bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3 rounded-full shadow-md transition transform hover:scale-105">
+        ✅ Nộp bài trắc nghiệm
+      </button>
+    </div>
+  </form>
+
+  <div class="mt-8 text-center">
+    <a href="{{ url_for('generate_quiz') }}"
+       class="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-semibold transition">
+       <i class="fa-solid fa-rotate-left mr-2"></i> Tạo bài khác
+    </a>
+  </div>
+</div>
+{% endblock %}
